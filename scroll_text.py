@@ -14,7 +14,7 @@ def run_scroller():
 
     # フォントと流すテキスト
     font = pygame.font.SysFont("impact", 45)
-    text_str = "*** DEMOSCENE REVIVAL in 'COMPUTER EXCICISE A' DEMOSCENE "
+    text_str = "*** DEMOSCENE REVIVAL in 'COMPUTER EXCISE A' DEMOSCENE "
     text_str += "*** CODING IS ART...  MINSIMPLE EQUATIONS CREATE"
     text_str += "INFINITE COMPLEXITY... GREETINGS TO ALL STUDENTS!"
 
