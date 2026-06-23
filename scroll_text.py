@@ -1,76 +1,104 @@
-import pygame
+import tkinter as tk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import numpy as np
+import os
 
 WIDTH, HEIGHT = 400, 300
 SCALE = 2
 
+FONT_PATHS = [
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "/System/Library/Fonts/SFNS.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+]
+
+
+def load_font(size):
+    for path in FONT_PATHS:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
 
 def run_scroller():
-    pygame.init()
-    screen = pygame.display.set_mode((WIDTH * SCALE, HEIGHT * SCALE))
-    pygame.display.set_caption("Megademo Module: Sinusoidal Scroller (compA-2026)")
-    clock = pygame.time.Clock()
-    surface = pygame.Surface((WIDTH, HEIGHT))
+    root = tk.Tk()
+    root.title("Megademo Module: Sinusoidal Scroller (compA-2026)")
+    root.resizable(False, False)
 
-    # フォントと流すテキスト
-    font = pygame.font.SysFont("impact", 45)
+    canvas = tk.Canvas(root, width=WIDTH * SCALE, height=HEIGHT * SCALE,
+                       bg='black', highlightthickness=0)
+    canvas.pack()
+
+    font = load_font(45)
     text_str = "*** DEMOSCENE REVIVAL in 'COMPUTER EXCISE A' DEMOSCENE "
     text_str += "*** CODING IS ART...  MINSIMPLE EQUATIONS CREATE"
     text_str += "INFINITE COMPLEXITY... GREETINGS TO ALL STUDENTS!"
 
-    # テキストをあらかじめ1枚の長い画像（サーフェス）としてレンダリング
-    text_surf = font.render(text_str, False, (255, 255, 255))
-    text_w, text_h = text_surf.get_size()
-    text_array = pygame.surfarray.array2d(text_surf)  # 2D配列として取得
+    # Render full text string into a single wide grayscale image
+    dummy_draw = ImageDraw.Draw(Image.new('L', (1, 1)))
+    try:
+        bbox = dummy_draw.textbbox((0, 0), text_str, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        ox, oy = -bbox[0], -bbox[1]
+    except AttributeError:
+        text_w, text_h = font.getsize(text_str)
+        ox, oy = 0, 0
 
-    scroll_x = 0
-    t = 0.0
+    text_img = Image.new('L', (text_w, text_h), 0)
+    ImageDraw.Draw(text_img).text((ox, oy), text_str, fill=255, font=font)
+    # shape: (text_h, text_w) — access column tex_x as text_array[:, tex_x]
+    text_array = np.array(text_img)
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (
-                event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
-            ):
-                running = False
+    photo = [None]
+    img_id = canvas.create_image(0, 0, anchor='nw')
+    running = [True]
+    scroll_x = [0]
+    t = [0.0]
 
-        # 画面を黒でクリア（NumPy配列を0に）
-        bg_array = np.zeros((HEIGHT, WIDTH), dtype=np.uint32)
+    def update():
+        if not running[0]:
+            return
 
-        t += 0.1
-        scroll_x += 2  # スクロール速度
-        if scroll_x > text_w:
-            scroll_x = 0
+        bg_array = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
 
-        # 1ピクセル（縦の列）ごとに処理
+        t[0] += 0.1
+        scroll_x[0] += 2
+        if scroll_x[0] > text_w:
+            scroll_x[0] = 0
+
         for scr_x in range(WIDTH):
-            # 長いテキスト配列のどこを読み込むか計算
-            tex_x = (scroll_x + scr_x) % text_w
-
-            # 【ここがミソ】列ごとにY座標をサイン波で上下にズラす！
+            tex_x = (scroll_x[0] + scr_x) % text_w
             wave_y = int(
                 (HEIGHT - text_h) / 2
-                + np.sin(t + scr_x * 0.05) * 30 * np.sin(t * 0.9 + scr_x * 0.09)
+                + np.sin(t[0] + scr_x * 0.05) * 30 * np.sin(t[0] * 0.9 + scr_x * 0.09)
             )
-
-            # 画面内に収まる範囲で、縦1列のドットをコピー
             if 0 <= wave_y < HEIGHT - text_h:
-                bg_array[wave_y : wave_y + text_h, scr_x] = text_array[tex_x,]
+                bg_array[wave_y: wave_y + text_h, scr_x] = text_array[:, tex_x]
 
-        # カラーサイクリングを乗せて虹色にする（オプション）
-        # 単なる白黒の文字データを、サイン波のパレットで色付け
-        r = ((bg_array > 0) * (np.sin(t) * 127 + 128)).astype(np.uint8)
-        g = ((bg_array > 0) * (np.sin(t + 2) * 127 + 128)).astype(np.uint8)
-        b = ((bg_array > 0) * (np.sin(t + 4) * 127 + 128)).astype(np.uint8)
+        r = ((bg_array > 0) * (np.sin(t[0]) * 127 + 128)).astype(np.uint8)
+        g = ((bg_array > 0) * (np.sin(t[0] + 2) * 127 + 128)).astype(np.uint8)
+        b = ((bg_array > 0) * (np.sin(t[0] + 4) * 127 + 128)).astype(np.uint8)
         rgb = np.stack((r, g, b), axis=-1)
 
-        pygame.surfarray.blit_array(surface, rgb.swapaxes(0, 1))
-        screen.blit(
-            pygame.transform.scale(surface, (WIDTH * SCALE, HEIGHT * SCALE)), (0, 0)
-        )
-        pygame.display.flip()
-        clock.tick(60)
-    pygame.quit()
+        img = Image.fromarray(rgb, 'RGB')
+        img = img.resize((WIDTH * SCALE, HEIGHT * SCALE), Image.NEAREST)
+        photo[0] = ImageTk.PhotoImage(img)
+        canvas.itemconfig(img_id, image=photo[0])
+
+        root.after(16, update)
+
+    def on_key(event):
+        if event.keysym == 'Escape':
+            running[0] = False
+            root.destroy()
+
+    root.bind('<Key>', on_key)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    update()
+    root.mainloop()
 
 
 if __name__ == "__main__":

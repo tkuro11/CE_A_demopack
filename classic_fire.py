@@ -1,24 +1,24 @@
-import pygame
+import tkinter as tk
+from PIL import Image, ImageTk
 import numpy as np
 
-WIDTH, HEIGHT = 320, 240  # 火を滑らかにするため、少し解像度を下げるとリアルになります
+WIDTH, HEIGHT = 320, 240
 SCALE = 2
 
 
 def run_fire():
-    pygame.init()
-    screen = pygame.display.set_mode((WIDTH * SCALE, HEIGHT * SCALE))
-    pygame.display.set_caption("Megademo Module: Hellfire (CompA-2026)")
-    clock = pygame.time.Clock()
-    surface = pygame.Surface((WIDTH, HEIGHT))
+    root = tk.Tk()
+    root.title("Megademo Module: Hellfire (CompA-2026)")
+    root.resizable(False, False)
 
-    # 火の強度を記録するバッファ (2D配列)
+    canvas = tk.Canvas(root, width=WIDTH * SCALE, height=HEIGHT * SCALE,
+                       bg='black', highlightthickness=0)
+    canvas.pack()
+
     fire_pixels = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
 
-    # 炎用カスタムパレットの作成 (インデックス0〜255をRGBに変換)
     palette = np.zeros((256, 3), dtype=np.uint8)
     for i in range(256):
-        # 0-85: 黒から赤、86-170: 赤から黄、171-255: 黄から白
         if i < 85:
             palette[i] = [i * 3, 0, 0]
         elif i < 170:
@@ -26,43 +26,45 @@ def run_fire():
         else:
             palette[i] = [255, 255, (i - 170) * 3]
 
-    running = True
+    photo = [None]
+    img_id = canvas.create_image(0, 0, anchor='nw')
+    running = [True]
 
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (
-                event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
-            ):
-                running = False
+    def update():
+        if not running[0]:
+            return
 
-        # 1. 最下行にランダムな「火種」を発生させる
         fire_pixels[-1, :] = np.random.randint(0, 256, WIDTH)
-
-        # 2. 炎の拡散処理 (NumPyスライスで上下左右の平均を取りつつ、上にスクロール＆冷却)
-        # 自分の上、左、右、2マス下の値を混ぜて減衰させる
         fire_pixels[:-1, 1:-1] = (
             (
-                fire_pixels[1:, 1:-1] * 1.2  # 下（メインの熱源）
-                + fire_pixels[1:, :-2] * 0.8  # 左下
-                + fire_pixels[1:, 2:] * 0.8  # 右下
-                + fire_pixels[:-1, 1:-1] * 0.2  # 自分自身
+                fire_pixels[1:, 1:-1] * 1.2
+                + fire_pixels[1:, :-2] * 0.8
+                + fire_pixels[1:, 2:] * 0.8
+                + fire_pixels[:-1, 1:-1] * 0.2
             )
             / 3.02
-        )  # 3.0より少し大きくすることで、上にいくほど冷えて消える(冷却係数)
+        )
 
-        # 3. 浮動小数点数をパレットインデックス(0-255)にキャスト
         indices = np.clip(fire_pixels, 0, 255).astype(np.uint8)
-
-        # 4. パレットを適用してRGB配列に変換
         rgb = palette[indices]
 
-        pygame.surfarray.blit_array(surface, rgb.swapaxes(0, 1))
-        screen.blit(
-            pygame.transform.scale(surface, (WIDTH * SCALE, HEIGHT * SCALE)), (0, 0)
-        )
-        pygame.display.flip()
-        clock.tick(60)
-    pygame.quit()
+        img = Image.fromarray(rgb, 'RGB')
+        img = img.resize((WIDTH * SCALE, HEIGHT * SCALE), Image.NEAREST)
+        photo[0] = ImageTk.PhotoImage(img)
+        canvas.itemconfig(img_id, image=photo[0])
+
+        root.after(16, update)
+
+    def on_key(event):
+        if event.keysym == 'Escape':
+            running[0] = False
+            root.destroy()
+
+    root.bind('<Key>', on_key)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    update()
+    root.mainloop()
 
 
 if __name__ == "__main__":

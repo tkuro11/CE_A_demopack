@@ -1,49 +1,64 @@
-import pygame
+import tkinter as tk
+from PIL import Image, ImageTk
 import numpy as np
 
 WIDTH, HEIGHT = 400, 300
 SCALE = 2
 
-def run_tunnel():
-    pygame.init()
-    screen = pygame.display.set_mode((WIDTH * SCALE, HEIGHT * SCALE))
-    pygame.display.set_caption("Megademo Module: Warp Tunnel (CompA-2026)")
-    clock = pygame.time.Clock()
-    surface = pygame.Surface((WIDTH, HEIGHT))
 
-    # 中心からの相対座標グリッド
+def run_tunnel():
+    root = tk.Tk()
+    root.title("Megademo Module: Warp Tunnel (CompA-2026)")
+    root.resizable(False, False)
+
+    canvas = tk.Canvas(root, width=WIDTH * SCALE, height=HEIGHT * SCALE,
+                       bg='black', highlightthickness=0)
+    canvas.pack()
+
     x = np.linspace(-1, 1, WIDTH)
     y = np.linspace(-1, 1, HEIGHT)
     xv, yv = np.meshgrid(x, y)
 
-    # 極座標への変換: 距離 r と 角度 angle
-    r = np.sqrt(xv**2 + yv**2) + 0.001  # ゼロ除算防止
+    r = np.sqrt(xv**2 + yv**2) + 0.001
     angle = np.arctan2(yv, xv)
 
-    running = True
-    t = 0.0
+    photo = [None]
+    img_id = canvas.create_image(0, 0, anchor='nw')
+    running = [True]
+    t = [0.0]
 
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
-                running = False
+    def update():
+        if not running[0]:
+            return
 
-        t += 0.08  # 前進スピード
+        t[0] += 0.08
 
-        # トンネルの計算: 1/r で奥に行くほど高密度に、angle * 3 で3条の渦に
-        v = np.sin(3.0 / r + t) + np.sin(angle * 3.0 + t)
+        v = np.sin(3.0 / r + t[0]) + np.sin(angle * 3.0 + t[0])
 
-        # カラーマッピング (ディープパープルからサイバーシアンへのグラデーション)
         r_ch = (np.sin(v * np.pi) * 127 + 128).astype(np.uint8)
         g_ch = (np.cos(v * np.pi) * 64 + 64).astype(np.uint8)
-        b_ch = (np.sin(v * np.pi + np.pi/2) * 127 + 128).astype(np.uint8)
+        b_ch = (np.sin(v * np.pi + np.pi / 2) * 127 + 128).astype(np.uint8)
 
         rgb = np.stack((r_ch, g_ch, b_ch), axis=-1)
-        pygame.surfarray.blit_array(surface, rgb.swapaxes(0, 1))
-        screen.blit(pygame.transform.scale(surface, (WIDTH * SCALE, HEIGHT * SCALE)), (0, 0))
-        pygame.display.flip()
-        clock.tick(60)
-    pygame.quit()
+
+        img = Image.fromarray(rgb, 'RGB')
+        img = img.resize((WIDTH * SCALE, HEIGHT * SCALE), Image.NEAREST)
+        photo[0] = ImageTk.PhotoImage(img)
+        canvas.itemconfig(img_id, image=photo[0])
+
+        root.after(16, update)
+
+    def on_key(event):
+        if event.keysym == 'Escape':
+            running[0] = False
+            root.destroy()
+
+    root.bind('<Key>', on_key)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    update()
+    root.mainloop()
+
 
 if __name__ == "__main__":
     run_tunnel()

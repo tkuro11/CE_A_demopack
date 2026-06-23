@@ -1,27 +1,43 @@
-import pygame
+import tkinter as tk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import numpy as np
 import random
+import os
 
-WIDTH, HEIGHT = 320, 240  # 解像度は低めが一番綺麗に燃えます
+WIDTH, HEIGHT = 320, 240
 SCALE = 2
 
+FONT_PATHS = [
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "/System/Library/Fonts/SFNS.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+]
+
+
+def load_font(size):
+    for path in FONT_PATHS:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
 def run_text_fire():
-    pygame.init()
-    screen = pygame.display.set_mode((WIDTH * SCALE, HEIGHT * SCALE))
-    pygame.display.set_caption("Megademo Module: Burning Typography (CompA-2026)")
-    clock = pygame.time.Clock()
-    surface = pygame.Surface((WIDTH, HEIGHT))
+    root = tk.Tk()
+    root.title("Megademo Module: Burning Typography (CompA-2026)")
+    root.resizable(False, False)
 
-    # フォントの初期化（レトロ感を出すため太めのシステムフォントを選択）
-    font = pygame.font.SysFont("impact", 58, bold=False)
-    
-    # 燃やす文字列のリスト
-    words = ["FIRE!", "BURN!", "Explosion!", "Comp-A", "MEGA!!", "DEMO", "PYGAME", "Splendid!!", "CooooL!", "HOT!HOT!"]
+    canvas = tk.Canvas(root, width=WIDTH * SCALE, height=HEIGHT * SCALE,
+                       bg='black', highlightthickness=0)
+    canvas.pack()
 
-    # 火の強度バッファ
+    font = load_font(58)
+
+    words = ["FIRE!", "BURN!", "Explosion!", "Comp-A", "MEGA!!", "DEMO",
+             "TKINTER", "Splendid!!", "CooooL!", "HOT!HOT!"]
+
     fire_pixels = np.zeros((HEIGHT, WIDTH), dtype=np.float32)
 
-    # 炎用カラーパレット (0=黒, 255=白)
     palette = np.zeros((256, 3), dtype=np.uint8)
     for i in range(256):
         if i < 85:
@@ -31,64 +47,73 @@ def run_text_fire():
         else:
             palette[i] = [255, 255, (i - 170) * 3]
 
-    # タイマーイベントの設定 (3000ms = 3秒ごとに文字を投入)
-    TEXT_EVENT = pygame.USEREVENT + 1
-    pygame.time.set_timer(TEXT_EVENT, 3000)
+    photo = [None]
+    img_id = canvas.create_image(0, 0, anchor='nw')
+    running = [True]
 
-    running = True
+    def drop_word():
+        if not running[0]:
+            return
+        word = random.choice(words)
 
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
-                running = False
-            
-            # 3秒ごとの文字生成処理
-            if event.type == TEXT_EVENT:
-                word = random.choice(words)
-                # 文字を白(255)でサーフェスに描画
-                text_surface = font.render(word, True, (255, 255, 255))
-                
-                # 配置位置の計算：中央やや下
-                tx = (WIDTH - text_surface.get_width()) // 2
-                ty = (HEIGHT // 2) + 20 
-                
-                # 文字サーフェスから2D配列(255か0か)を取り出す
-                text_array = pygame.surfarray.array2d(text_surface)
-                # 描画範囲をスライスで指定
-                tw, th = text_array.shape
-                
-                # 画面外にはみ出さないよう安全にバッファに「熱源」を上書き
-                # text_arrayは(W, H)なので、fire_pixelsの(H, W)に合わせて転置(.T)して適応
-                if tx + tw <= WIDTH and ty + th <= HEIGHT:
-                    # 完全に上書きするか、+= で既存の火と混ぜる（255でクリップ）
-                    mask = (text_array.T < 0)
-                    fire_pixels[ty:ty+th, tx:tx+tw][mask] = 255.0
+        # Render word to a grayscale PIL image sized just large enough
+        dummy = ImageDraw.Draw(Image.new('L', (1, 1)))
+        try:
+            bbox = dummy.textbbox((0, 0), word, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            ox, oy = -bbox[0], -bbox[1]
+        except AttributeError:
+            tw, th = font.getsize(word)
+            ox, oy = 0, 0
 
-                # 以降はランダムなタイミングで文字が飛び出す
-                pygame.time.set_timer(TEXT_EVENT, 3000+random.randint(0, 4000))
+        text_img = Image.new('L', (tw, th), 0)
+        ImageDraw.Draw(text_img).text((ox, oy), word, fill=255, font=font)
+        text_arr = np.array(text_img)  # (th, tw)
 
-        # 1. 最下行にランダムな「基本火種」を供給し続ける
+        tx = (WIDTH - tw) // 2
+        ty = (HEIGHT // 2) + 20
+
+        if 0 <= tx and tx + tw <= WIDTH and 0 <= ty and ty + th <= HEIGHT:
+            mask = text_arr > 0
+            fire_pixels[ty:ty + th, tx:tx + tw][mask] = 255.0
+
+        root.after(3000 + random.randint(0, 4000), drop_word)
+
+    def update():
+        if not running[0]:
+            return
+
         fire_pixels[-1, :] = np.random.randint(0, 256, WIDTH)
-
-        # 2. 炎の拡散・冷却処理（文字のドットもこのアルゴリズムで上にメラメラと流れる）
         fire_pixels[:-1, 1:-1] = (
-            fire_pixels[1:, 1:-1] * 1.3 +  # 下からの熱
-            fire_pixels[1:, :-2] * 0.7 +   # 左下からの熱
-            fire_pixels[1:, 2:] * 0.7 +    # 右下からの熱
-            fire_pixels[:-1, 1:-1] * 0.2   # 前フレームの残熱
-        ) / 2.93  # 冷却係数
+            fire_pixels[1:, 1:-1] * 1.3
+            + fire_pixels[1:, :-2] * 0.7
+            + fire_pixels[1:, 2:] * 0.7
+            + fire_pixels[:-1, 1:-1] * 0.2
+        ) / 2.93
 
-        # 3. カラーパレット適用
         indices = np.clip(fire_pixels, 0, 255).astype(np.uint8)
         rgb = palette[indices]
 
-        # 4. 画面描画
-        pygame.surfarray.blit_array(surface, rgb.swapaxes(0, 1))
-        screen.blit(pygame.transform.scale(surface, (WIDTH * SCALE, HEIGHT * SCALE)), (0, 0))
-        pygame.display.flip()
-        clock.tick(60)
+        img = Image.fromarray(rgb, 'RGB')
+        img = img.resize((WIDTH * SCALE, HEIGHT * SCALE), Image.NEAREST)
+        photo[0] = ImageTk.PhotoImage(img)
+        canvas.itemconfig(img_id, image=photo[0])
 
-    pygame.quit()
+        root.after(16, update)
+
+    def on_key(event):
+        if event.keysym == 'Escape':
+            running[0] = False
+            root.destroy()
+
+    root.bind('<Key>', on_key)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+
+    root.after(3000, drop_word)
+    update()
+    root.mainloop()
+
 
 if __name__ == "__main__":
     run_text_fire()
