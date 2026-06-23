@@ -23,7 +23,7 @@
 - Python 3.12 以上
 - 依存パッケージ（`pyproject.toml` に記載）
   - `numpy >= 2.4.6`
-  - `pygame >= 2.6.1`
+  - `pillow >= 12.2.0`
 
 ## セットアップ
 
